@@ -1,0 +1,19 @@
+[package]
+name = "stream-diffusion-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Stream diffusion implementation in Rust using Burn framework"
+authors = ["Kapil"]
+license = "MIT"
+repository = "https://github.com/compiling-org/stream-diffusion-rs"
+homepage = "https://github.com/compiling-org/stream-diffusion-rs"
+keywords = ["ml", "diffusion", "ai", "stream", "burn"]
+categories = ["science", "multimedia", "api-bindings"]
+
+[dependencies]
+# Basic dependencies for a simple ML library
+anyhow = "1.0"
+thiserror = "1.0"
+
+[features]
+default = []
