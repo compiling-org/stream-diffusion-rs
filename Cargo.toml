@@ -11,7 +11,11 @@ keywords = ["ml", "diffusion", "ai", "stream", "burn"]
 categories = ["science", "multimedia", "api-bindings"]
 
 [dependencies]
-# Basic dependencies for a simple ML library
+# Burn framework for deep learning (use stable version)
+burn = { version = "0.12", features = ["ndarray"] }
+burn-ndarray = "0.12"
+
+# Error handling
 anyhow = "1.0"
 thiserror = "1.0"
 

@@ -4,11 +4,13 @@
 //! High-performance AI image generation with real-time streaming capabilities.
 
 use std::collections::HashMap;
+use burn::tensor::Tensor;
+use burn::backend::NdArray;
 
 /// Main stream diffusion engine
-pub struct StreamDiffusionRs {
+pub struct StreamDiffusionRs<B: burn::backend::Backend> {
     // Diffusion models
-    models: HashMap<String, DiffusionModel>,
+    models: HashMap<String, DiffusionModel<B>>,
 
     // Streaming parameters
     stream_params: StreamParameters,
@@ -18,10 +20,10 @@ pub struct StreamDiffusionRs {
 }
 
 /// Diffusion model representation
-pub struct DiffusionModel {
+pub struct DiffusionModel<B: burn::backend::Backend> {
     name: String,
     parameters: ModelParameters,
-    weights: Vec<f32>, // Placeholder for model weights
+    weights: Tensor<B, 4>, // Model weights as Burn tensor
 }
 
 /// Model parameters for diffusion
@@ -46,7 +48,7 @@ pub struct ProcessingState {
     queue_size: usize,
 }
 
-impl Default for StreamDiffusionRs {
+impl<B: burn::backend::Backend> Default for StreamDiffusionRs<B> {
     fn default() -> Self {
         Self {
             models: HashMap::new(),
@@ -76,17 +78,20 @@ impl Default for ProcessingState {
     }
 }
 
-impl StreamDiffusionRs {
+impl<B: burn::backend::Backend> StreamDiffusionRs<B> {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn load_model(&mut self, name: &str, model_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Placeholder for model loading logic
+        // Placeholder for model loading logic using Burn
+        let device = burn::backend::NdArrayDevice::Cpu;
+        let weights = Tensor::<B, 4>::zeros([1, 3, 512, 512], &device); // Placeholder tensor
+
         let model = DiffusionModel {
             name: name.to_string(),
             parameters: ModelParameters::default(),
-            weights: Vec::new(),
+            weights,
         };
         self.models.insert(name.to_string(), model);
         Ok(())
@@ -98,7 +103,7 @@ impl StreamDiffusionRs {
     }
 
     pub fn generate_image(&mut self, prompt: &str, model_name: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        // Placeholder for image generation logic
+        // Placeholder for image generation logic using Burn
         if !self.models.contains_key(model_name) {
             return Err("Model not found".into());
         }
@@ -106,8 +111,16 @@ impl StreamDiffusionRs {
         self.processing_state.is_processing = true;
         self.processing_state.current_frame += 1;
 
-        // Simulate image generation (return dummy data)
-        let image_data = vec![0u8; 512 * 512 * 3]; // RGB image
+        // Simulate image generation using Burn tensor operations
+        let device = burn::backend::NdArrayDevice::Cpu;
+        let latent = Tensor::<B, 4>::zeros([1, 4, 64, 64], &device); // Latent space
+
+        // Simple diffusion-like process (placeholder)
+        let noise = Tensor::<B, 4>::random([1, 4, 64, 64], burn::tensor::Distribution::Normal(0.0, 1.0), &device);
+        let _processed = latent + noise; // Simplified diffusion step
+
+        // Convert to RGB image (placeholder)
+        let image_data = vec![128u8; 512 * 512 * 3]; // Gray image
 
         self.processing_state.is_processing = false;
         Ok(image_data)
@@ -117,6 +130,9 @@ impl StreamDiffusionRs {
         if !self.models.contains_key(model_name) {
             return Err("Model not found".into());
         }
+
+        // Initialize Burn device for streaming
+        let _device = burn::backend::NdArrayDevice::Cpu;
 
         self.stream_params.enable_streaming = true;
         self.processing_state.is_processing = true;
