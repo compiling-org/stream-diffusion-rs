@@ -1,16 +1,38 @@
 //! # Stream Diffusion RS
 //!
-//! Stream diffusion implementation in Rust using Burn framework.
+//! Stream diffusion implementation in Rust.
 //! High-performance AI image generation with real-time streaming capabilities.
+//!
+//! Features:
+//! - Core diffusion models
+//! - ONNX model conversion and inference
+//! - ML research utilities (data loading, preprocessing, metrics)
+//! - EEG data analysis and audiovisual conversion
+//! - Advanced visualization tools
+//! - Custom model training framework
+
+pub mod diffusion;
+pub mod onnx;
+pub mod ml;
+pub mod eeg;
+pub mod visualization;
+pub mod training;
+pub mod web;
+
+pub use diffusion::*;
+pub use onnx::*;
+pub use ml::*;
+pub use eeg::*;
+pub use visualization::*;
+pub use training::*;
+pub use web::*;
 
 use std::collections::HashMap;
-use burn::tensor::Tensor;
-use burn::backend::NdArray;
 
 /// Main stream diffusion engine
-pub struct StreamDiffusionRs<B: burn::backend::Backend> {
+pub struct StreamDiffusionRs {
     // Diffusion models
-    models: HashMap<String, DiffusionModel<B>>,
+    models: HashMap<String, DiffusionModel>,
 
     // Streaming parameters
     stream_params: StreamParameters,
@@ -20,10 +42,10 @@ pub struct StreamDiffusionRs<B: burn::backend::Backend> {
 }
 
 /// Diffusion model representation
-pub struct DiffusionModel<B: burn::backend::Backend> {
+pub struct DiffusionModel {
     name: String,
     parameters: ModelParameters,
-    weights: Tensor<B, 4>, // Model weights as Burn tensor
+    weights: ndarray::Array4<f32>, // Model weights
 }
 
 /// Model parameters for diffusion
@@ -48,7 +70,7 @@ pub struct ProcessingState {
     queue_size: usize,
 }
 
-impl<B: burn::backend::Backend> Default for StreamDiffusionRs<B> {
+impl Default for StreamDiffusionRs {
     fn default() -> Self {
         Self {
             models: HashMap::new(),
@@ -78,15 +100,14 @@ impl Default for ProcessingState {
     }
 }
 
-impl<B: burn::backend::Backend> StreamDiffusionRs<B> {
+impl StreamDiffusionRs {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn load_model(&mut self, name: &str, model_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Placeholder for model loading logic using Burn
-        let device = burn::backend::NdArrayDevice::Cpu;
-        let weights = Tensor::<B, 4>::zeros([1, 3, 512, 512], &device); // Placeholder tensor
+        // Placeholder for model loading logic
+        let weights = ndarray::Array4::<f32>::zeros((1, 3, 512, 512)); // Placeholder tensor
 
         let model = DiffusionModel {
             name: name.to_string(),
@@ -103,7 +124,7 @@ impl<B: burn::backend::Backend> StreamDiffusionRs<B> {
     }
 
     pub fn generate_image(&mut self, prompt: &str, model_name: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        // Placeholder for image generation logic using Burn
+        // Placeholder for image generation logic
         if !self.models.contains_key(model_name) {
             return Err("Model not found".into());
         }
@@ -111,13 +132,12 @@ impl<B: burn::backend::Backend> StreamDiffusionRs<B> {
         self.processing_state.is_processing = true;
         self.processing_state.current_frame += 1;
 
-        // Simulate image generation using Burn tensor operations
-        let device = burn::backend::NdArrayDevice::Cpu;
-        let latent = Tensor::<B, 4>::zeros([1, 4, 64, 64], &device); // Latent space
+        // Simulate image generation
+        let latent = ndarray::Array4::<f32>::zeros((1, 4, 64, 64)); // Latent space
 
         // Simple diffusion-like process (placeholder)
-        let noise = Tensor::<B, 4>::random([1, 4, 64, 64], burn::tensor::Distribution::Normal(0.0, 1.0), &device);
-        let _processed = latent + noise; // Simplified diffusion step
+        let noise = ndarray::Array4::<f32>::zeros((1, 4, 64, 64)); // Placeholder noise
+        let _processed = &latent + &noise; // Simplified diffusion step
 
         // Convert to RGB image (placeholder)
         let image_data = vec![128u8; 512 * 512 * 3]; // Gray image
@@ -130,9 +150,6 @@ impl<B: burn::backend::Backend> StreamDiffusionRs<B> {
         if !self.models.contains_key(model_name) {
             return Err("Model not found".into());
         }
-
-        // Initialize Burn device for streaming
-        let _device = burn::backend::NdArrayDevice::Cpu;
 
         self.stream_params.enable_streaming = true;
         self.processing_state.is_processing = true;
