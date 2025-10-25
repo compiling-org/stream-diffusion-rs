@@ -1,7 +1,6 @@
 //! Training framework for custom ML models
 
-use ndarray::{Array2, Array3, Array4, s, Axis};
-use std::collections::HashMap;
+use ndarray::{Array2, Array4, s, Axis};
 use std::path::Path;
 use serde::{Deserialize, Serialize};
 
@@ -141,14 +140,14 @@ impl ModelTrainer {
         let mut total_correct = 0;
         let mut total_samples = 0;
 
-        let num_batches = data.nrows() / self.config.batch_size;
+        let num_batches = data.dim().0 / self.config.batch_size;
 
         for batch_idx in 0..num_batches {
             let start_idx = batch_idx * self.config.batch_size;
-            let end_idx = ((batch_idx + 1) * self.config.batch_size).min(data.nrows());
+            let end_idx = ((batch_idx + 1) * self.config.batch_size).min(data.dim().0);
 
-            let batch_data = data.slice(s![start_idx..end_idx, .., .., ..]);
-            let batch_labels = labels.slice(s![start_idx..end_idx, ..]);
+            let batch_data = data.slice(s![start_idx..end_idx, .., .., ..]).to_owned();
+            let batch_labels = labels.slice(s![start_idx..end_idx, ..]).to_owned();
 
             // Forward pass
             let predictions = model.forward(&batch_data)?;
@@ -186,14 +185,14 @@ impl ModelTrainer {
         let mut total_correct = 0;
         let mut total_samples = 0;
 
-        let num_batches = data.nrows() / self.config.batch_size;
+        let num_batches = data.dim().0 / self.config.batch_size;
 
         for batch_idx in 0..num_batches {
             let start_idx = batch_idx * self.config.batch_size;
-            let end_idx = ((batch_idx + 1) * self.config.batch_size).min(data.nrows());
+            let end_idx = ((batch_idx + 1) * self.config.batch_size).min(data.dim().0);
 
-            let batch_data = data.slice(s![start_idx..end_idx, .., .., ..]);
-            let batch_labels = labels.slice(s![start_idx..end_idx, ..]);
+            let batch_data = data.slice(s![start_idx..end_idx, .., .., ..]).to_owned();
+            let batch_labels = labels.slice(s![start_idx..end_idx, ..]).to_owned();
 
             // Forward pass
             let predictions = model.forward(&batch_data)?;
@@ -337,7 +336,7 @@ impl ModelTrainer {
 
         for (param, grad) in parameters.iter().zip(gradients.iter()) {
             // Apply weight decay
-            let decayed_grad = grad + &(weight_decay * param);
+            let decayed_grad = *grad + &(weight_decay * *param);
 
             // Apply momentum (simplified - would need velocity tracking)
             let update = lr * &decayed_grad;
@@ -360,7 +359,7 @@ impl ModelTrainer {
 
         for (param, grad) in parameters.iter().zip(gradients.iter()) {
             // Apply weight decay
-            let decayed_grad = grad + &(weight_decay * param);
+            let decayed_grad = *grad + &(weight_decay * *param);
 
             // Adam update (simplified - missing bias correction and state tracking)
             let update = lr * &decayed_grad;
@@ -382,7 +381,7 @@ impl ModelTrainer {
 
         for (param, grad) in parameters.iter().zip(gradients.iter()) {
             // Apply weight decay
-            let decayed_grad = grad + &(weight_decay * param);
+            let decayed_grad = *grad + &(weight_decay * *param);
 
             // RMSProp update (simplified)
             let update = lr * &decayed_grad;
@@ -488,13 +487,13 @@ impl SimpleNN {
 impl TrainableModel for SimpleNN {
     fn forward(&self, input: &Array4<f32>) -> Result<Array2<f32>, Box<dyn std::error::Error>> {
         // Flatten input
-        let batch_size = input.nrows();
-        let flattened_size = input.ncols() * input.ncols() * input.ncols(); // Assume square images
+        let batch_size = input.dim().0;
+        let flattened_size = input.dim().1 * input.dim().2 * input.dim().3; // Assume square images
         let input_2d = input.to_shape((batch_size, flattened_size))?;
 
         // Forward pass
         let hidden = Self::relu(&(input_2d.dot(&self.weights1) + &self.biases1));
-        let output = self.softmax(&(hidden.dot(&self.weights2) + &self.biases2));
+        let output = SimpleNN::softmax(&(hidden.dot(&self.weights2) + &self.biases2));
 
         Ok(output)
     }
@@ -503,13 +502,13 @@ impl TrainableModel for SimpleNN {
         // Simplified backpropagation (placeholder)
         // In practice, this would compute proper gradients
 
-        let batch_size = input.nrows();
-        let flattened_size = input.ncols() * input.ncols() * input.ncols();
+        let batch_size = input.dim().0;
+        let flattened_size = input.dim().1 * input.dim().2 * input.dim().3;
         let input_2d = input.to_shape((batch_size, flattened_size))?;
 
         // Forward pass to get activations
         let hidden = Self::relu(&(input_2d.dot(&self.weights1) + &self.biases1));
-        let output = self.softmax(&(hidden.dot(&self.weights2) + &self.biases2));
+        let output = SimpleNN::softmax(&(hidden.dot(&self.weights2) + &self.biases2));
 
         // Compute gradients (simplified)
         let output_error = &output - targets;
@@ -520,8 +519,8 @@ impl TrainableModel for SimpleNN {
         self.grads_weights1 = input_2d.t().dot(&hidden_error) / batch_size as f32;
 
         // Bias gradients
-        self.grads_biases2 = output_error.mean_axis(ndarray::Axis(0)).unwrap().to_shape((1, output_error.ncols()))?;
-        self.grads_biases1 = hidden_error.mean_axis(ndarray::Axis(0)).unwrap().to_shape((1, hidden_error.ncols()))?;
+        self.grads_biases2 = output_error.mean_axis(ndarray::Axis(0)).unwrap().to_shape((1, output_error.ncols())).unwrap().to_owned();
+        self.grads_biases1 = hidden_error.mean_axis(ndarray::Axis(0)).unwrap().to_shape((1, hidden_error.ncols())).unwrap().to_owned();
 
         Ok(())
     }
@@ -600,7 +599,7 @@ impl TrainingData {
             Ok(Self::new(features_4d.to_owned(), labels_array))
         } else {
             // For non-image data, create dummy 4D shape
-            let features_4d = Array4::from_elem((num_samples, 1, 1, feature_size), 0.0);
+            let mut features_4d = Array4::from_elem((num_samples, 1, 1, feature_size), 0.0);
             for i in 0..num_samples {
                 for j in 0..feature_size {
                     features_4d[[i, 0, 0, j]] = features_array[[i, j]];
@@ -612,7 +611,7 @@ impl TrainingData {
 
     /// Split data into train/validation sets
     pub fn split_train_val(self, val_split: f32) -> (TrainingData, TrainingData) {
-        let num_samples = self.features.nrows();
+        let num_samples = self.features.dim().0;
         let val_size = (num_samples as f32 * val_split) as usize;
         let train_size = num_samples - val_size;
 
@@ -630,7 +629,7 @@ impl TrainingData {
 
     /// Shuffle the data
     pub fn shuffle(mut self) -> Self {
-        let num_samples = self.features.nrows();
+        let num_samples = self.features.dim().0;
         let mut indices: Vec<usize> = (0..num_samples).collect();
 
         // Simple Fisher-Yates shuffle
@@ -644,8 +643,8 @@ impl TrainingData {
         let mut new_labels = Array2::zeros(self.labels.dim());
 
         for (new_idx, &old_idx) in indices.iter().enumerate() {
-            new_features.row_mut(new_idx).assign(&self.features.row(old_idx));
-            new_labels.row_mut(new_idx).assign(&self.labels.row(old_idx));
+            new_features.slice_mut(s![new_idx, .., .., ..]).assign(&self.features.slice(s![old_idx, .., .., ..]));
+            new_labels.slice_mut(s![new_idx, ..]).assign(&self.labels.slice(s![old_idx, ..]));
         }
 
         self.features = new_features;
@@ -674,7 +673,7 @@ impl TrainingData {
         let label_std = self.labels.std(0.0);
 
         DataStatistics {
-            num_samples: self.features.nrows(),
+            num_samples: self.features.dim().0,
             feature_shape: self.features.dim(),
             label_shape: self.labels.dim(),
             feature_mean,

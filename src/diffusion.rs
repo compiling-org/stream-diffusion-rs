@@ -1,10 +1,8 @@
 //! Core diffusion model implementation using Burn
 
-use ndarray::{Array2, Array3, Array4, s, Axis};
+use ndarray::{Array2, Array3, Array4};
 use ndarray_rand::RandomExt;
 use ndarray_rand::rand_distr::Normal;
-use std::collections::HashMap;
-use std::path::Path;
 
 /// Diffusion model configuration
 #[derive(Debug, Clone)]
@@ -21,7 +19,7 @@ pub struct DiffusionConfig {
 
 /// UNet-based diffusion model using ndarray for computations
 /// This serves as a functional implementation until Burn integration is available
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiffusionModel {
     config: DiffusionConfig,
     // Model weights stored as ndarrays
@@ -51,7 +49,21 @@ struct ResnetBlock;
 struct AttentionBlock;
 
 impl DiffusionModel {
-    pub fn new(config: DiffusionConfig) -> Self {
+    pub fn new() -> Self {
+        let config = DiffusionConfig {
+            steps: 20,
+            guidance_scale: 7.5,
+            image_size: (512, 512),
+            latent_channels: 4,
+            num_attention_heads: 8,
+            attention_head_dim: 64,
+            num_layers: 6,
+            cross_attention_dim: 768,
+        };
+        Self::new_with_config(config)
+    }
+
+    pub fn new_with_config(config: DiffusionConfig) -> Self {
         use ndarray_rand::RandomExt;
         use ndarray_rand::rand_distr::Normal;
 
@@ -72,6 +84,23 @@ impl DiffusionModel {
             conv_out_bias,
             time_embedding_weight,
         }
+    }
+
+    pub fn generate_image(&self, prompt: &str, model_name: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        // Create a simple pipeline for image generation
+        let pipeline = DiffusionPipeline::new(self.clone());
+
+        // Generate image
+        let image_array = pipeline.generate(prompt)?;
+
+        // Convert to RGB bytes (simplified)
+        let mut image_data = Vec::new();
+        for &val in image_array.iter() {
+            let byte = ((val * 255.0) as u8).min(255);
+            image_data.push(byte);
+        }
+
+        Ok(image_data)
     }
 
     pub fn forward(&self, x: ndarray::Array4<f32>, timestep: f32, context: Option<ndarray::Array3<f32>>) -> ndarray::Array4<f32> {
@@ -129,15 +158,15 @@ impl DiffusionModel {
         let mut output = ndarray::Array4::<f32>::zeros(x.dim());
 
         // Very basic convolution simulation
-        for b in 0..x.rows() {
-            for c in 0..weight.nrows() {
-                for h in 0..x.ncols() {
-                    for w in 0..x.ncols() {
+        for b in 0..x.dim().0 {
+            for c in 0..weight.dim().0 {
+                for h in 0..x.dim().2 {
+                    for w in 0..x.dim().3 {
                         let mut sum = 0.0;
                         for kh in 0..3 {
                             for kw in 0..3 {
-                                for ic in 0..x.nrows() {
-                                    if h + kh < x.ncols() && w + kw < x.ncols() {
+                                for ic in 0..x.dim().1 {
+                                    if h + kh < x.dim().2 && w + kw < x.dim().3 {
                                         sum += x[[b, ic, h + kh, w + kw]] * weight[[c, ic, kh, kw]];
                                     }
                                 }
@@ -150,10 +179,10 @@ impl DiffusionModel {
         }
 
         if let Some(bias) = bias {
-            for b in 0..output.nrows() {
-                for c in 0..output.ncols() {
-                    for h in 0..output.ncols() {
-                        for w in 0..output.ncols() {
+            for b in 0..output.dim().0 {
+                for c in 0..output.dim().1 {
+                    for h in 0..output.dim().2 {
+                        for w in 0..output.dim().3 {
                             output[[b, c, h, w]] += bias[c];
                         }
                     }
@@ -168,9 +197,9 @@ impl DiffusionModel {
         // Simplified GroupNorm
         let mut output = x.clone();
 
-        for b in 0..x.rows() {
+        for b in 0..x.dim().0 {
             for g in 0..num_groups {
-                let channels_per_group = x.ncols() / num_groups;
+                let channels_per_group = x.dim().1 / num_groups;
                 let start_c = g * channels_per_group;
                 let end_c = (g + 1) * channels_per_group;
 
@@ -180,8 +209,8 @@ impl DiffusionModel {
                 let mut count = 0;
 
                 for c in start_c..end_c {
-                    for h in 0..x.ncols() {
-                        for w in 0..x.ncols() {
+                    for h in 0..x.dim().2 {
+                        for w in 0..x.dim().3 {
                             let val = x[[b, c, h, w]];
                             sum += val;
                             sum_sq += val * val;
@@ -196,8 +225,8 @@ impl DiffusionModel {
 
                 // Normalize
                 for c in start_c..end_c {
-                    for h in 0..x.ncols() {
-                        for w in 0..x.ncols() {
+                    for h in 0..x.dim().2 {
+                        for w in 0..x.dim().3 {
                             output[[b, c, h, w]] = (x[[b, c, h, w]] - mean) / std;
                         }
                     }
@@ -383,7 +412,7 @@ impl DiffusionPipeline {
         }
     }
 
-    fn latents_to_image(&self, latents: ndarray::Array4<f32>) -> ndarray::Array4<f32> {
+    fn latents_to_image(&self, latents: ndarray::Array4<f32>) -> Result<ndarray::Array4<f32>, Box<dyn std::error::Error>> {
         // Simplified latent to image conversion
         // In practice, this would use a proper VAE decoder
 
@@ -391,23 +420,23 @@ impl DiffusionPipeline {
         let min_val = latents.fold(f32::INFINITY, |a, &b| a.min(b));
         let max_val = latents.fold(f32::NEG_INFINITY, |a, &b| a.max(b));
 
-        let scaled = (latents - min_val) / (max_val - min_val);
+        let scaled = (latents.clone() - min_val) / (max_val - min_val);
 
         // Convert 4-channel latents to 3-channel RGB
         // Take first 3 channels and average the rest
-        let mut rgb_image = ndarray::Array4::<f32>::zeros((latents.nrows(), 3, latents.ncols(), latents.ncols()));
+        let mut rgb_image = ndarray::Array4::<f32>::zeros((latents.dim().0, 3, latents.dim().2, latents.dim().3));
 
-        for b in 0..latents.nrows() {
+        for b in 0..latents.dim().0 {
             for c in 0..3 {
-                for h in 0..latents.ncols() {
-                    for w in 0..latents.ncols() {
+                for h in 0..latents.dim().2 {
+                    for w in 0..latents.dim().3 {
                         rgb_image[[b, c, h, w]] = scaled[[b, c, h, w]];
                     }
                 }
             }
         }
 
-        rgb_image
+        Ok(rgb_image)
     }
 
     /// Generate image with streaming support
@@ -457,7 +486,7 @@ impl DiffusionPipeline {
         if let Some(vae_decoder) = &self.vae_decoder {
             Ok(vae_decoder.decode(latents))
         } else {
-            Ok(self.latents_to_image(latents))
+            Ok(self.latents_to_image(latents)?)
         }
     }
 }

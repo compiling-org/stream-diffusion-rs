@@ -15,13 +15,13 @@ categories = ["science", "multimedia", "api-bindings"]
 ort = "1.16"
 
 # Data processing and ML utilities
-ndarray = "0.15"
+ndarray = { version = "0.15", features = ["serde"] }
 ndarray-stats = "0.5"
 ndarray-rand = "0.14"
 rand = "0.8"
 
 # Visualization
-plotters = { version = "0.3", default-features = false, features = ["svg_backend", "bitmap_backend"] }
+plotters = { version = "0.3", default-features = false, features = ["svg_backend", "bitmap_backend", "line_series"] }
 
 # Audio processing for audiovisual conversion
 rodio = "0.17"

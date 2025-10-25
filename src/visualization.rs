@@ -1,7 +1,6 @@
 //! Data visualization utilities for ML research and EEG analysis
 
 use plotters::prelude::*;
-use plotters::style::colors::*;
 use ndarray::Array2;
 use std::path::Path;
 
@@ -21,7 +20,7 @@ impl Plotter {
     pub fn plot_line(&self, x_data: &[f32], y_data: &[f32], title: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (800, 600)).into_drawing_area();
+        let root = SVGBackend::new(&output_path, (800, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let x_min = x_data.iter().fold(f32::INFINITY, |a, &b| a.min(b));
@@ -38,9 +37,9 @@ impl Plotter {
 
         chart.configure_mesh().draw()?;
 
-        chart.draw_series(LineSeries::new(
+        chart.draw_series(plotters::series::LineSeries::new(
             x_data.iter().zip(y_data.iter()).map(|(&x, &y)| (x, y)),
-            &BLUE,
+            &plotters::style::BLUE,
         ))?;
 
         root.present()?;
@@ -51,7 +50,7 @@ impl Plotter {
     pub fn plot_scatter(&self, x_data: &[f32], y_data: &[f32], title: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (800, 600)).into_drawing_area();
+        let root = SVGBackend::new(&output_path, (800, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let x_min = x_data.iter().fold(f32::INFINITY, |a, &b| a.min(b));
@@ -68,14 +67,9 @@ impl Plotter {
 
         chart.configure_mesh().draw()?;
 
-        chart.draw_series(PointSeries::of_element(
-            x_data.iter().zip(y_data.iter()).map(|(&x, &y)| (x, y)),
-            2,
-            &BLUE,
-            &|c, s, st| {
-                return EmptyElement::at(c) + Circle::new((0, 0), s, st.filled());
-            },
-        ))?;
+        chart.draw_series(
+            x_data.iter().zip(y_data.iter()).map(|(&x, &y)| Circle::new((x, y), 2, BLUE.filled()))
+        )?;
 
         root.present()?;
         Ok(())
@@ -85,7 +79,7 @@ impl Plotter {
     pub fn plot_histogram(&self, data: &[f32], bins: usize, title: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (800, 600)).into_drawing_area();
+        let root = SVGBackend::new(&output_path, (800, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let min_val = data.iter().fold(f32::INFINITY, |a, &b| a.min(b));
@@ -116,7 +110,7 @@ impl Plotter {
     pub fn plot_confusion_matrix(&self, matrix: &Array2<f32>, class_names: &[&str], filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (800, 600)).into_drawing_area();
+        let root = SVGBackend::new(&output_path, (800, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
@@ -124,13 +118,13 @@ impl Plotter {
             .margin(5)
             .x_label_area_size(30)
             .y_label_area_size(30)
-            .build_cartesian_2d(0..matrix.ncols(), 0..matrix.nrows())?;
+            .build_cartesian_2d(0..matrix.ncols() as i32, 0..matrix.nrows() as i32)?;
 
         chart.configure_mesh()
-            .x_labels(matrix.ncols())
-            .y_labels(matrix.nrows())
-            .x_label_formatter(&|x| if *x < class_names.len() { class_names[*x].to_string() } else { "".to_string() })
-            .y_label_formatter(&|y| if *y < class_names.len() { class_names[*y].to_string() } else { "".to_string() })
+            .x_labels(matrix.ncols() as usize)
+            .y_labels(matrix.nrows() as usize)
+            .x_label_formatter(&|x| if *x < class_names.len() as i32 { class_names[*x as usize].to_string() } else { "".to_string() })
+            .y_label_formatter(&|y| if *y < class_names.len() as i32 { class_names[*y as usize].to_string() } else { "".to_string() })
             .draw()?;
 
         // Plot heatmap
@@ -140,7 +134,7 @@ impl Plotter {
                 let color = self.value_to_color(value);
 
                 chart.draw_series(std::iter::once(Rectangle::new(
-                    [(j, i), (j + 1, i + 1)],
+                    [(j as i32, i as i32), (j as i32 + 1, i as i32 + 1)],
                     color.filled(),
                 )))?;
 
@@ -148,7 +142,7 @@ impl Plotter {
                 if value > 0.1 {
                     chart.draw_series(std::iter::once(Text::new(
                         format!("{:.2}", value),
-                        (j, i),
+                        (j as i32, i as i32),
                         ("sans-serif", 12).into_font().color(&BLACK),
                     )))?;
                 }
@@ -163,7 +157,7 @@ impl Plotter {
     pub fn plot_training_curves(&self, train_losses: &[f32], val_losses: &[f32], train_accs: Option<&[f32]>, val_accs: Option<&[f32]>, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (800, 600)).into_drawing_area();
+        let root = SVGBackend::new(&output_path, (800, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let epochs: Vec<usize> = (0..train_losses.len()).collect();
@@ -177,20 +171,20 @@ impl Plotter {
             .margin(5)
             .x_label_area_size(30)
             .y_label_area_size(30)
-            .build_cartesian_2d(0.0..epochs_f32.last().unwrap_or(&1.0), loss_min..loss_max)?;
+            .build_cartesian_2d(0.0..*epochs_f32.last().unwrap_or(&1.0), loss_min..loss_max)?;
 
         chart.configure_mesh().draw()?;
 
         // Plot losses
-        chart.draw_series(LineSeries::new(
+        chart.draw_series(plotters::series::LineSeries::new(
             epochs_f32.iter().zip(train_losses.iter()).map(|(&x, &y)| (x, y)),
-            &BLUE,
-        ))?.label("Train Loss").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+            &plotters::style::BLUE,
+        ))?.label("Train Loss").legend(|(x, y)| plotters::element::PathElement::new(vec![(x, y), (x + 20, y)], &plotters::style::BLUE));
 
-        chart.draw_series(LineSeries::new(
+        chart.draw_series(plotters::series::LineSeries::new(
             epochs_f32.iter().zip(val_losses.iter()).map(|(&x, &y)| (x, y)),
-            &RED,
-        ))?.label("Val Loss").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+            &plotters::style::RED,
+        ))?.label("Val Loss").legend(|(x, y)| plotters::element::PathElement::new(vec![(x, y), (x + 20, y)], &plotters::style::RED));
 
         // Plot accuracies if provided
         if let (Some(train_accs), Some(val_accs)) = (train_accs, val_accs) {
@@ -202,19 +196,19 @@ impl Plotter {
                 .margin(5)
                 .x_label_area_size(30)
                 .y_label_area_size(30)
-                .build_cartesian_2d(0.0..epochs_f32.last().unwrap_or(&1.0), acc_min..acc_max)?;
+                .build_cartesian_2d(0.0..*epochs_f32.last().unwrap_or(&1.0), acc_min..acc_max)?;
 
             chart_acc.configure_mesh().draw()?;
 
-            chart_acc.draw_series(LineSeries::new(
+            chart_acc.draw_series(plotters::series::LineSeries::new(
                 epochs_f32.iter().zip(train_accs.iter()).map(|(&x, &y)| (x, y)),
-                &GREEN,
-            ))?.label("Train Acc").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
+                &plotters::style::GREEN,
+            ))?.label("Train Acc").legend(|(x, y)| plotters::element::PathElement::new(vec![(x, y), (x + 20, y)], &plotters::style::GREEN));
 
-            chart_acc.draw_series(LineSeries::new(
+            chart_acc.draw_series(plotters::series::LineSeries::new(
                 epochs_f32.iter().zip(val_accs.iter()).map(|(&x, &y)| (x, y)),
-                &RGBColor(255, 165, 0),
-            ))?.label("Val Acc").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+                &plotters::style::RGBColor(255, 165, 0),
+            ))?.label("Val Acc").legend(|(x, y)| plotters::element::PathElement::new(vec![(x, y), (x + 20, y)], &plotters::style::RED));
         }
 
         root.present()?;
@@ -225,7 +219,7 @@ impl Plotter {
     pub fn plot_eeg_topography(&self, values: &[f32], electrode_names: &[&str], filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (600, 600)).into_drawing_area();
+        let root = SVGBackend::new(&output_path, (600, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
@@ -271,7 +265,7 @@ impl Plotter {
     pub fn plot_spectrogram(&self, spectrogram: &Array2<f32>, freqs: &[f32], times: &[f32], filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (800, 600)).into_drawing_area();
+        let root = SVGBackend::new(&output_path, (800, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
@@ -279,7 +273,7 @@ impl Plotter {
             .margin(5)
             .x_label_area_size(30)
             .y_label_area_size(30)
-            .build_cartesian_2d(times[0]..times.last().unwrap_or(&1.0), freqs[0]..freqs.last().unwrap_or(&100.0))?;
+            .build_cartesian_2d(times[0]..*times.last().unwrap_or(&1.0), freqs[0]..*freqs.last().unwrap_or(&100.0))?;
 
         chart.configure_mesh().draw()?;
 
@@ -292,10 +286,12 @@ impl Plotter {
                 let normalized_value = (value - min_val) / (max_val - min_val);
                 let color = self.interpolate_color(normalized_value);
 
-                chart.draw_series(std::iter::once(Rectangle::new(
-                    [(times[j], freqs[i]), (times[j + 1], freqs[i + 1])],
-                    color.filled(),
-                )))?;
+                if j + 1 < times.len() && i + 1 < freqs.len() {
+                    chart.draw_series(std::iter::once(Rectangle::new(
+                        [(times[j], freqs[i]), (times[j + 1], freqs[i + 1])],
+                        color.filled(),
+                    )))?;
+                }
             }
         }
 
@@ -333,23 +329,26 @@ impl Plotter {
         RGBColor(r, g, b)
     }
 
-    fn draw_colorbar(&self, root: &DrawingArea<BitMapBackend, plotters::coord::Shift>, min_val: f32, max_val: f32) -> Result<(), Box<dyn std::error::Error>> {
-        let colorbar_area = root.split_evenly((1, 2))[1];
+    fn draw_colorbar(&self, root: &DrawingArea<SVGBackend, plotters::coord::Shift>, min_val: f32, max_val: f32) -> Result<(), Box<dyn std::error::Error>> {
+        let colorbar_area = &root.split_evenly((1, 2))[1];
 
         let mut colorbar = ChartBuilder::on(&colorbar_area)
             .margin(20)
-            .build_cartesian_2d(0..1, min_val..max_val)?;
+            .build_cartesian_2d(0.0..1.0, min_val..max_val)?;
 
         colorbar.configure_mesh()
-            .set_tick_mark_size((0, 0))
+            .disable_x_mesh()
+            .disable_y_mesh()
             .draw()?;
 
         // Draw colorbar gradient
         for i in 0..100 {
             let t = i as f32 / 99.0;
             let color = self.interpolate_color(t);
-            colorbar.draw_series(std::iter::once(Rectangle::new(
-                [(0, (min_val + t * (max_val - min_val)) as i32), (1, (min_val + (t + 0.01) * (max_val - min_val)) as i32)],
+            let y_start = min_val + t * (max_val - min_val);
+            let y_end = min_val + (t + 0.01) * (max_val - min_val);
+            colorbar.draw_series(std::iter::once(plotters::element::Rectangle::new(
+                [(0.0, y_start), (1.0, y_end)],
                 color.filled(),
             )))?;
         }

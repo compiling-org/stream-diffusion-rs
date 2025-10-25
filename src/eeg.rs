@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// EEG data structure
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EEGData {
     pub data: Array3<f32>, // [channels, time_steps, epochs]
     pub sampling_rate: f32,
@@ -41,12 +41,12 @@ impl EEGData {
 
     /// Get number of channels
     pub fn num_channels(&self) -> usize {
-        self.data.nrows()
+        self.data.dim().0
     }
 
     /// Get number of time steps
     pub fn num_time_steps(&self) -> usize {
-        self.data.ncols()
+        self.data.dim().2
     }
 
     /// Get number of epochs
@@ -56,7 +56,7 @@ impl EEGData {
 
     /// Get data for specific channel and epoch
     pub fn get_channel_epoch(&self, channel: usize, epoch: usize) -> Array2<f32> {
-        self.data.slice(s![channel, .., epoch]).to_owned()
+        self.data.slice(s![channel, .., epoch..epoch+1]).to_owned()
     }
 
     /// Get time vector
@@ -257,9 +257,9 @@ impl DigitalFilter {
         let window_size = 5;
         let mut filtered = signal.clone();
 
-        for i in window_size..signal.len() {
-            let sum: f32 = (0..window_size).map(|j| signal[i - j]).sum();
-            filtered[i] = sum / window_size as f32;
+        for i in window_size..signal.nrows() {
+            let sum: f32 = (0..window_size).map(|j| signal[[0, i - j]]).sum();
+            filtered[[0, i]] = sum / window_size as f32;
         }
 
         *signal = filtered;
@@ -355,7 +355,8 @@ impl EEGVisualizer {
 
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (800, 600)).into_drawing_area();
+        let mut buffer = vec![0u8; 800 * 600 * 3];
+        let root = BitMapBackend::with_buffer(&mut buffer, (800, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
@@ -363,13 +364,13 @@ impl EEGVisualizer {
             .margin(5)
             .x_label_area_size(30)
             .y_label_area_size(30)
-            .build_cartesian_2d(0.0..time_vector.last().unwrap_or(&1.0), channel_data.fold(f32::INFINITY, |a, &b| a.min(b))..channel_data.fold(f32::NEG_INFINITY, |a, &b| a.max(b)))?;
+            .build_cartesian_2d(0.0..*time_vector.last().unwrap_or(&1.0), channel_data.fold(f32::INFINITY, |a, &b| a.min(b))..channel_data.fold(f32::NEG_INFINITY, |a, &b| a.max(b)))?;
 
         chart.configure_mesh().draw()?;
 
-        chart.draw_series(LineSeries::new(
+        chart.draw_series(plotters::series::LineSeries::new(
             time_vector.iter().zip(channel_data.iter()).map(|(&t, &v)| (t, v)),
-            &RED,
+            &plotters::style::RED,
         ))?;
 
         root.present()?;
@@ -380,7 +381,8 @@ impl EEGVisualizer {
     pub fn plot_psd(&self, freqs: &[f32], psd: &[f32], channel_name: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (800, 600)).into_drawing_area();
+        let mut buffer = vec![0u8; 800 * 600 * 3];
+        let root = BitMapBackend::with_buffer(&mut buffer, (800, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
@@ -388,13 +390,13 @@ impl EEGVisualizer {
             .margin(5)
             .x_label_area_size(30)
             .y_label_area_size(30)
-            .build_cartesian_2d(0.0..freqs.last().unwrap_or(&100.0), 0.0..psd.iter().fold(0.0, |a, &b| a.max(b)))?;
+            .build_cartesian_2d(0.0..*freqs.last().unwrap_or(&100.0), 0.0..psd.iter().fold(0.0f32, |a, &b| a.max(b)))?;
 
         chart.configure_mesh().draw()?;
 
-        chart.draw_series(LineSeries::new(
+        chart.draw_series(plotters::series::LineSeries::new(
             freqs.iter().zip(psd.iter()).map(|(&f, &p)| (f, p)),
-            &BLUE,
+            &plotters::style::BLUE,
         ))?;
 
         root.present()?;
@@ -408,7 +410,8 @@ impl EEGVisualizer {
 
         let output_path = self.output_dir.join(filename);
 
-        let root = BitMapBackend::new(&output_path, (600, 600)).into_drawing_area();
+        let mut buffer = vec![0u8; 600 * 600 * 3];
+        let root = BitMapBackend::with_buffer(&mut buffer, (600, 600)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
@@ -432,8 +435,14 @@ impl EEGVisualizer {
         for (i, &(x, y)) in electrode_positions.iter().enumerate() {
             if i < data.num_channels() {
                 let value = data.data[[i, 0, epoch]]; // First time point
-                let color = if value > 0.0 { &RED } else { &BLUE };
-                chart.draw_series(std::iter::once(Circle::new((x, y), 5, color)))?;
+                let color = if value > 0.0 { &plotters::style::RED } else { &plotters::style::BLUE };
+                chart.draw_series(std::iter::once(plotters::element::Circle::new((x, y), 5, color)))?;
+
+                chart.draw_series(std::iter::once(plotters::element::Text::new(
+                    format!("Ch{}", i + 1),
+                    (x, y + 0.05),
+                    plotters::style::FontDesc::new(plotters::style::FontFamily::SansSerif, 10.0, plotters::style::FontStyle::Normal).color(&plotters::style::BLACK),
+                )))?;
             }
         }
 
@@ -450,12 +459,12 @@ pub struct EEGToAudiovisualConverter {
 }
 
 impl EEGToAudiovisualConverter {
-    pub fn new(output_dir: &Path) -> Self {
-        Self {
+    pub fn new(output_dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
             processor: EEGProcessor::new(),
             visualizer: EEGVisualizer::new(output_dir),
             audio_generator: AudioGenerator::new(),
-        }
+        })
     }
 
     /// Convert EEG data to audiovisual representation
@@ -479,25 +488,29 @@ impl EEGToAudiovisualConverter {
     fn extract_features(&self, eeg_data: &EEGData) -> Result<EEGFeatures, Box<dyn std::error::Error>> {
         let mut features = EEGFeatures {
             band_powers: HashMap::new(),
-            connectivity: Array2::zeros((eeg_data.num_channels(), eeg_data.num_channels())),
+            connectivity: vec![0.0; eeg_data.num_channels() * eeg_data.num_channels()],
             complexity: Vec::new(),
         };
 
         // Extract frequency band powers
         for band in &[FrequencyBand::Alpha, FrequencyBand::Beta, FrequencyBand::Theta] {
             let powers = self.processor.extract_band_power(eeg_data, band.clone())?;
-            features.band_powers.insert(band.name().to_string(), powers);
+            let powers_vec: Vec<f32> = powers.iter().cloned().collect();
+            features.band_powers.insert(band.name().to_string(), powers_vec);
         }
 
         // Compute connectivity matrix (simplified correlation)
+        let mut connectivity_vec = Vec::new();
         for i in 0..eeg_data.num_channels() {
             for j in 0..eeg_data.num_channels() {
                 let channel_i = eeg_data.data.slice(s![i, .., 0]);
                 let channel_j = eeg_data.data.slice(s![j, .., 0]);
                 // Simple correlation coefficient
-                features.connectivity[[i, j]] = self.compute_correlation(&channel_i, &channel_j);
+                let corr = self.compute_correlation(&channel_i, &channel_j);
+                connectivity_vec.push(corr);
             }
         }
+        features.connectivity = connectivity_vec;
 
         // Compute complexity measures (Hjorth parameters)
         for channel in 0..eeg_data.num_channels() {
@@ -520,7 +533,7 @@ impl EEGToAudiovisualConverter {
         // Map EEG features to visual elements
         for (band_name, powers) in &features.band_powers {
             // Use band powers to modulate colors/intensity
-            let intensity = powers.mean().unwrap_or(0.0) * 255.0;
+            let intensity = powers.iter().sum::<f32>() / powers.len() as f32 * 255.0;
             let color_offset = match band_name.as_str() {
                 "Alpha" => 0,
                 "Beta" => 1,
@@ -546,6 +559,7 @@ impl EEGToAudiovisualConverter {
     fn generate_audio(&self, features: &EEGFeatures) -> Result<AudioData, Box<dyn std::error::Error>> {
         self.audio_generator.generate_from_features(features)
     }
+
 
     /// Create real-time EEG processor for streaming data
     pub fn create_realtime_processor(&self, buffer_size: usize) -> RealtimeEEGProcessor {
@@ -582,7 +596,7 @@ impl EEGToAudiovisualConverter {
             .collect();
 
         let signal_std = signal.std(0.0);
-        let deriv_std = derivative.iter().cloned().collect::<Vec<f32>>().std(0.0);
+        let deriv_std = derivative.iter().cloned().collect::<Vec<f32>>().iter().map(|&x| (x - 0.0).powi(2)).sum::<f32>().sqrt() / derivative.len() as f32;
 
         if signal_std == 0.0 {
             0.0
@@ -593,15 +607,15 @@ impl EEGToAudiovisualConverter {
 }
 
 /// Extracted EEG features
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct EEGFeatures {
-    pub band_powers: HashMap<String, Array2<f32>>,
-    pub connectivity: Array2<f32>,
+    pub band_powers: HashMap<String, Vec<f32>>,
+    pub connectivity: Vec<f32>,
     pub complexity: Vec<f32>,
 }
 
 /// Generated visual data
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct VisualData {
     pub image_data: Vec<u8>,
     pub width: usize,
@@ -609,7 +623,7 @@ pub struct VisualData {
 }
 
 /// Generated audio data
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AudioData {
     pub samples: Vec<f32>,
     pub sample_rate: u32,
@@ -647,7 +661,7 @@ impl AudioGenerator {
                 _ => 10.0,
             };
 
-            let amplitude = powers.mean().unwrap_or(0.0) * 0.1;
+            let amplitude = powers.iter().sum::<f32>() / powers.len() as f32 * 0.1;
 
             for i in 0..num_samples {
                 let t = i as f32 / self.sample_rate as f32;
@@ -719,7 +733,7 @@ impl RealtimeEEGProcessor {
             return Err("Insufficient buffer size".into());
         }
 
-        let signal = Array2::from_shape_vec((1, self.buffer.len()), self.buffer.clone())?;
+        let signal = Array2::from_shape_vec((1, self.buffer.len()), self.buffer.clone()).unwrap();
 
         // Compute basic features
         let mean = signal.mean().unwrap_or(0.0);
@@ -757,7 +771,7 @@ impl RealtimeEEGProcessor {
 }
 
 /// Real-time EEG features
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct RealtimeEEGFeatures {
     pub mean: f32,
     pub std: f32,

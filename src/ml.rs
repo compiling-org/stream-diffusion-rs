@@ -1,7 +1,6 @@
 //! ML research utilities for data processing, metrics, and experimentation
 
-use ndarray::{Array2, Array3, Array4, Axis, s};
-use ndarray_stats::QuantileExt;
+use ndarray::{Array2, Array3, Array4, Axis};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -9,7 +8,7 @@ use std::path::Path;
 pub struct DataLoader {
     batch_size: usize,
     shuffle: bool,
-    data: Vec<Array4<f32>>, // [batch, channels, height, width]
+    data: Vec<Array3<f32>>, // [channels, height, width] - single sample
     labels: Option<Vec<Array2<f32>>>,
     current_index: usize,
     indices: Vec<usize>,
@@ -58,10 +57,10 @@ impl DataLoader {
 
             // Placeholder: create dummy image data
             // In practice, you would load actual images and preprocess them
-            let dummy_image = Array4::<f32>::zeros((1, 3, 224, 224)); // CHW format
+            let dummy_image = Array3::<f32>::zeros((3, 224, 224)); // CHW format
             let dummy_label = Array2::<f32>::zeros((1, 10)); // One-hot encoded classes
 
-            self.add_batch(dummy_image, Some(dummy_label));
+            self.add_sample(dummy_image, Some(dummy_label));
         }
 
         self.reset();
@@ -99,18 +98,18 @@ impl DataLoader {
 
             // Placeholder: create dummy EEG data
             // In practice, you would parse actual EEG files
-            let dummy_eeg = Array4::<f32>::zeros((1, 32, 1000, 1)); // [batch, channels, time_steps, 1]
+            let dummy_eeg = Array3::<f32>::zeros((32, 1000, 1)); // [channels, time_steps, 1]
             let dummy_label = Array2::<f32>::zeros((1, 4)); // 4 classes (rest, left, right, feet)
 
-            self.add_batch(dummy_eeg, Some(dummy_label));
+            self.add_sample(dummy_eeg, Some(dummy_label));
         }
 
         self.reset();
         Ok(())
     }
 
-    /// Add data batch
-    pub fn add_batch(&mut self, data: Array4<f32>, labels: Option<Array2<f32>>) {
+    /// Add data sample
+    pub fn add_sample(&mut self, data: Array3<f32>, labels: Option<Array2<f32>>) {
         self.data.push(data);
         if let Some(labels) = labels {
             if let Some(ref mut label_vec) = self.labels {
@@ -159,18 +158,26 @@ impl DataLoader {
             }
         }
 
-        // Stack batch data
+        // Stack batch data - add batch dimension
         let batch_data = if batch_data_list.len() == 1 {
-            batch_data_list[0].clone()
+            // Add batch dimension: [channels, height, width] -> [1, channels, height, width]
+            let sample = &batch_data_list[0];
+            let (c, h, w) = sample.dim();
+            let reshaped = sample.clone().into_shape((1, c, h, w)).unwrap();
+            reshaped
         } else {
-            ndarray::stack(Axis(0), &batch_data_list.iter().map(|x| x.view()).collect::<Vec<_>>()).unwrap()
+            // Stack along batch dimension: [channels, height, width] -> [batch, channels, height, width]
+            let views: Vec<_> = batch_data_list.iter().map(|x| x.view()).collect();
+            ndarray::stack(Axis(0), &views).unwrap()
         };
 
         let batch_labels = if !batch_labels_list.is_empty() {
             Some(if batch_labels_list.len() == 1 {
                 batch_labels_list[0].clone()
             } else {
-                ndarray::stack(Axis(0), &batch_labels_list.iter().map(|x| x.view()).collect::<Vec<_>>()).unwrap()
+                // Stack labels along batch dimension - ensure consistent dimensions
+                let views: Vec<_> = batch_labels_list.iter().map(|x| x.view()).collect();
+                ndarray::stack(Axis(0), &views).unwrap().into_dimensionality::<ndarray::Ix2>().unwrap()
             })
         } else {
             None
@@ -197,15 +204,15 @@ impl DataLoader {
         };
 
         if !self.data.is_empty() {
-            let first_batch = &self.data[0];
-            stats.shape = Some(first_batch.dim());
+            let first_sample = &self.data[0];
+            stats.shape = Some((1, first_sample.dim().0, first_sample.dim().1, first_sample.dim().2)); // Add batch dim
 
             let mut sum = 0.0;
             let mut sum_sq = 0.0;
             let mut count = 0usize;
 
-            for batch in &self.data {
-                for &val in batch.iter() {
+            for sample in &self.data {
+                for &val in sample.iter() {
                     sum += val;
                     sum_sq += val * val;
                     stats.min = stats.min.min(val);
@@ -400,7 +407,7 @@ impl Metrics {
         let target_binary = targets.mapv(|x| if x > threshold { 1.0 } else { 0.0 });
 
         let true_positive = (&pred_binary * &target_binary).sum();
-        let false_positive = (&pred_binary * (1.0 - &target_binary)).sum();
+        let false_positive: f32 = (&pred_binary * &(1.0 - &target_binary)).sum();
         let false_negative = ((1.0 - &pred_binary) * &target_binary).sum();
 
         let precision = if true_positive + false_positive > 0.0 {
@@ -426,8 +433,8 @@ impl Metrics {
     pub fn auc_roc(predictions: &Array2<f32>, targets: &Array2<f32>) -> f32 {
         // Simplified AUC computation (placeholder)
         // In practice, you would implement proper AUC calculation
-        let mut pred_scores: Vec<f32> = predictions.iter().cloned().collect();
-        let mut target_labels: Vec<f32> = targets.iter().cloned().collect();
+        let pred_scores: Vec<f32> = predictions.iter().cloned().collect();
+        let target_labels: Vec<f32> = targets.iter().cloned().collect();
 
         // Sort by prediction scores
         let mut indices: Vec<usize> = (0..pred_scores.len()).collect();

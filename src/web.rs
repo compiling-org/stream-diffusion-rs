@@ -1,7 +1,7 @@
 //! Web interface for Stream Diffusion RS
 
 use axum::{
-    extract::{DefaultBodyLimit, Path, Query},
+    extract::Path,
     http::StatusCode,
     response::{Html, IntoResponse, Json},
     routing::{get, post},
@@ -15,8 +15,8 @@ use tokio::sync::RwLock;
 /// Shared application state
 #[derive(Clone)]
 pub struct AppState {
-    pub engine: Arc<RwLock<crate::StreamDiffusionRs>>,
-    pub registry: Arc<RwLock<crate::ModelRegistry>>,
+    pub engine: Arc<RwLock<crate::diffusion::DiffusionModel>>,
+    pub registry: Arc<RwLock<crate::onnx::ModelRegistry>>,
     pub output_dir: std::path::PathBuf,
 }
 
@@ -35,7 +35,7 @@ struct ModelInfo {
     output_shapes: HashMap<String, Vec<i64>>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct GenerationRequest {
     prompt: String,
     model_name: String,
@@ -59,7 +59,7 @@ struct EEGUploadRequest {
 
 #[derive(Serialize)]
 struct EEGAnalysisResponse {
-    features: crate::EEGFeatures,
+    features: crate::eeg::EEGFeatures,
     visualizations: Vec<String>, // URLs to generated plots
 }
 
@@ -69,13 +69,13 @@ pub fn create_app(state: AppState) -> Router {
         .route("/", get(serve_index))
         .route("/api/models", get(list_models))
         .route("/api/models/:name", get(get_model_info))
-        .route("/api/generate", post(generate_image))
+        .route("/api/generate", axum::routing::post(generate_image))
+        .layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024))
         .route("/api/eeg/analyze", post(analyze_eeg))
         .route("/api/training/start", post(start_training))
         .route("/api/training/status", get(get_training_status))
         .route("/files/:filename", get(serve_file))
         // .layer(CorsLayer::permissive())
-        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB limit
         .with_state(state)
 }
 
@@ -108,8 +108,8 @@ async fn get_model_info(
     if let Some(model) = registry.get_model(&model_name) {
         let info = ModelInfo {
             name: model_name,
-            input_shapes: model.get_input_names().clone(),
-            output_shapes: model.get_output_names().clone(),
+            input_shapes: HashMap::new(), // Placeholder
+            output_shapes: HashMap::new(), // Placeholder
         };
 
         Json(ApiResponse {
@@ -127,10 +127,11 @@ async fn get_model_info(
 }
 
 /// Generate image from text prompt
+#[axum::debug_handler]
 async fn generate_image(
     axum::extract::State(state): axum::extract::State<AppState>,
     axum::extract::Json(request): axum::extract::Json<GenerationRequest>,
-) -> Json<ApiResponse<GenerationResponse>> {
+) -> Result<Json<ApiResponse<GenerationResponse>>, StatusCode> {
     let mut engine = state.engine.write().await;
 
     match engine.generate_image(&request.prompt, &request.model_name) {
@@ -142,17 +143,17 @@ async fn generate_image(
                 format: "rgb".to_string(),
             };
 
-            Json(ApiResponse {
+            Ok(Json(ApiResponse {
                 success: true,
                 data: Some(response),
                 error: None,
-            })
+            }))
         }
-        Err(e) => Json(ApiResponse {
+        Err(e) => Ok(Json(ApiResponse {
             success: false,
             data: None,
             error: Some(e.to_string()),
-        }),
+        })),
     }
 }
 
@@ -169,25 +170,25 @@ async fn analyze_eeg(
     );
 
     // Process EEG data
-    let mut processor = crate::EEGProcessor::new();
-    processor.add_filter("bandpass", crate::DigitalFilter::new(crate::FilterType::BandPass, 4, 1.0, 40.0));
+    let mut processor = crate::eeg::EEGProcessor::new();
+    processor.add_filter("bandpass", crate::eeg::DigitalFilter::new(crate::eeg::FilterType::BandPass, 4, 1.0, 40.0));
 
-    let alpha_power = processor.extract_band_power(&eeg_data, crate::FrequencyBand::Alpha).unwrap();
-    let beta_power = processor.extract_band_power(&eeg_data, crate::FrequencyBand::Beta).unwrap();
+    let alpha_power = processor.extract_band_power(&eeg_data, crate::eeg::FrequencyBand::Alpha).unwrap();
+    let beta_power = processor.extract_band_power(&eeg_data, crate::eeg::FrequencyBand::Beta).unwrap();
 
     // Create features
     let mut band_powers = HashMap::new();
-    band_powers.insert("Alpha".to_string(), alpha_power);
-    band_powers.insert("Beta".to_string(), beta_power);
+    band_powers.insert("Alpha".to_string(), alpha_power.iter().cloned().collect());
+    band_powers.insert("Beta".to_string(), beta_power.iter().cloned().collect());
 
-    let features = crate::EEGFeatures {
+    let features = crate::eeg::EEGFeatures {
         band_powers,
-        connectivity: ndarray::Array2::<f32>::zeros((request.channel_names.len(), request.channel_names.len())),
+        connectivity: vec![0.0; request.channel_names.len() * request.channel_names.len()],
         complexity: vec![0.0; request.channel_names.len()],
     };
 
     // Generate visualizations
-    let visualizer = crate::EEGVisualizer::new(&state.output_dir);
+    let visualizer = crate::eeg::EEGVisualizer::new(&state.output_dir);
     let mut visualizations = Vec::new();
 
     for channel in 0..3.min(request.channel_names.len()) {
@@ -213,7 +214,7 @@ async fn analyze_eeg(
 /// Start model training
 async fn start_training(
     axum::extract::State(state): axum::extract::State<AppState>,
-    axum::extract::Json(config): axum::extract::Json<crate::TrainingConfig>,
+    axum::extract::Json(_config): axum::extract::Json<crate::TrainingConfig>,
 ) -> Json<ApiResponse<String>> {
     // This would start training in a background task
     // For now, return a placeholder response
@@ -593,8 +594,18 @@ const INDEX_HTML: &str = r#"<!DOCTYPE html>
 
 /// Start web server with default configuration
 pub async fn start_default_server() -> Result<(), Box<dyn std::error::Error>> {
-    let engine = Arc::new(RwLock::new(crate::StreamDiffusionRs::new()));
-    let registry = Arc::new(RwLock::new(crate::ModelRegistry::new()?));
+    let config = crate::diffusion::DiffusionConfig {
+        steps: 20,
+        guidance_scale: 7.5,
+        image_size: (512, 512),
+        latent_channels: 4,
+        num_attention_heads: 8,
+        attention_head_dim: 64,
+        num_layers: 6,
+        cross_attention_dim: 768,
+    };
+    let engine = Arc::new(RwLock::new(crate::diffusion::DiffusionModel::new()));
+    let registry = Arc::new(RwLock::new(crate::onnx::ModelRegistry::new()?));
     let output_dir = std::path::PathBuf::from("output");
 
     std::fs::create_dir_all(&output_dir)?;
