@@ -37,19 +37,25 @@ pub mod diffusion;
 pub mod onnx;
 pub mod ml;
 pub mod eeg;
+pub mod fractal_shaders;
 pub mod visualization;
 pub mod training;
 pub mod web;
 pub mod nuwe_integration;
 pub mod node_graph;
 pub mod basic_nuwe_features;
+pub mod stream_diffusion;
+pub mod real_time_streaming;
+pub mod bevy_integration;
 
 // Re-export main types
 pub use diffusion::*;
 pub use onnx::*;
 pub use ml::*;
 pub use eeg::*;
+pub use fractal_shaders::*;
 pub use visualization::*;
 pub use training::*;
 pub use nuwe_integration::*;
 pub use basic_nuwe_features::*;
+pub use stream_diffusion::*;

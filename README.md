@@ -1,6 +1,6 @@
 # Stream Diffusion RS 🧠⚡
 
-**High-performance multimodal AI and ML research framework in Rust** - A comprehensive toolkit for diffusion models, EEG analysis, multisensorial processing, and real-time neurofeedback systems.
+**A comprehensive toolkit for diffusion models, EEG analysis, multisensorial processing, and real-time neurofeedback systems.**
 
 ## ⚠️ **WORK IN PROGRESS - Active Development**
 
@@ -16,6 +16,9 @@
 - **Basic NUWE Features**: Lightweight node-based processing for standalone use
 - **Web Server**: Functional HTTP server with Gradio-like UI at http://127.0.0.1:3000
 - **Compilation Fixed**: All syntax errors resolved, project builds successfully
+- **Gesture Control**: Real-time pose estimation and gesture recognition with camera input
+- **Fractal Shaders**: Real-time fractal visualization with WebGL shaders and presets
+- **Audiovisual Integration**: Synchronized audio-visual feedback systems
 
 #### 🔄 **In Development**
 - **MCP Server Integration**: Model Context Protocol servers for AI-brain interfaces
@@ -84,6 +87,11 @@
 - **Style Transfer**: Dynamic visual style modulation
 - **Composition Tools**: Multi-layer image synthesis and blending
 - **Export Options**: High-resolution image and video output
+- **Fractal Shader Renderer**: Real-time fractal visualization with WebGL shaders
+  - Mandelbrot, Julia, and Burning Ship fractal types
+  - Customizable parameters (iterations, zoom, offset, rotation, colors)
+  - Animation support with time-based effects
+  - Preset configurations for different creative styles
 
 ### 🎨 **Visualization**
 - **Plotting Engine**: Line plots, scatter plots, histograms, confusion matrices
