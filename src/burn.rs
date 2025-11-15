@@ -1,3 +1,73 @@
+//! Burn framework integration for deep learning models
+//!
+//! This module provides integration with the Burn framework for creating,
+//! training, and running deep learning models in pure Rust.
+
+#[cfg(feature = "burn-ml")]
+use burn::tensor::Tensor;
+#[cfg(feature = "burn-ml")]
+use burn::nn::{Linear, LinearConfig};
+#[cfg(feature = "burn-ml")]
+use burn::module::Module;
+#[cfg(feature = "burn-ml")]
+use burn::config::Config;
+#[cfg(feature = "burn-ml")]
+use burn::record::{CompactRecorder, Recorder};
+#[cfg(feature = "burn-ml")]
+use burn::prelude::Module; // Add this import for the Module derive macro
+
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+
+/// Configuration for the Burn model
+#[cfg(feature = "burn-ml")]
+#[derive(Config, Debug)]
+pub struct BurnModelConfig {
+    pub input_size: usize,
+    pub hidden_size: usize,
+    pub output_size: usize,
+    pub learning_rate: f64,
+}
+
+/// A simple neural network using Burn
+#[cfg(feature = "burn-ml")]
+#[derive(Module, Debug)]
+pub struct BurnModel<B: burn::tensor::backend::Backend> {
+    linear1: Linear<B>,
+    linear2: Linear<B>,
+}
+
+#[cfg(feature = "burn-ml")]
+impl<B: burn::tensor::backend::Backend> BurnModel<B> {
+    /// Create a new Burn model
+    pub fn new(config: &BurnModelConfig, device: &B) -> Self {
+        let linear1 = LinearConfig::new(config.input_size, config.hidden_size)
+            .with_bias(true)
+            .init(device);
+        let linear2 = LinearConfig::new(config.hidden_size, config.output_size)
+            .with_bias(true)
+            .init(device);
+
+        Self {
+            linear1,
+            linear2,
+        }
+    }
+
+    /// Forward pass through the model
+    pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        let x = self.linear1.forward(input);
+        self.linear2.forward(x)
+    }
+}
+
+/// Training data for the Burn model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BurnTrainingData {
+    pub features: Vec<Vec<f32>>,
+    pub labels: Vec<Vec<f32>>,
+}
+
 /// Burn model manager for creating, training, and using Burn models
 #[cfg(feature = "burn-ml")]
 pub struct BurnModelManager<B: burn::tensor::backend::Backend> {
