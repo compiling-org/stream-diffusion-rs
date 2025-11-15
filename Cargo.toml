@@ -5,14 +5,24 @@ edition = "2021"
 description = "Stream diffusion implementation in Rust using Burn framework"
 authors = ["Kapil"]
 license = "MIT"
-repository = "https://github.com/compiling-org/stream-diffusion-rs"
-homepage = "https://github.com/compiling-org/stream-diffusion-rs"
+repository = "https://github.com/compiling-org/stream-diffusion-rust"
+homepage = "https://github.com/compiling-org/stream-diffusion-rust"
 keywords = ["ml", "diffusion", "ai", "stream", "burn"]
 categories = ["science", "multimedia", "api-bindings"]
 
 [dependencies]
 # ONNX runtime for model inference
 ort = "1.16"
+
+# Native Rust deep learning frameworks (essential for ML)
+# Burn - Comprehensive DL framework with multiple backends
+burn = { version = "0.16", features = ["ndarray", "train", "metrics"], default-features = false, optional = true }
+
+# PyTorch bindings - Version compatible with libtorch
+tch = { version = "0.17", optional = true }
+
+# Data serialization - Pin compatible bincode version for burn
+bincode = "1.3.3"
 
 # Data processing and ML utilities
 ndarray = { version = "0.15", features = ["serde"] }
@@ -50,7 +60,64 @@ axum = { version = "0.7", features = ["multipart", "macros"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors"] }
 mime_guess = "2.0"
-chrono = "0.4.42"
+chrono = { version = "0.4.42", features = ["serde"] }
+
+# Lazy static initialization
+once_cell = "1.19"
 
 [features]
-default = []
+# Enable all ML features by default (excluding tch for now to avoid conflicts)
+default = ["full"]
+full = [
+    "burn-ml",        # Use burn ML capabilities
+]
+# Keep individual features available for specific use cases
+burn-ml = ["dep:burn"]
+tch-ml = ["dep:tch"]  # Enable PyTorch integration
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[[bin]]
+name = "ui_analyzer"
+path = "src/bin/ui_analyzer.rs"
+
+[[bin]]
+name = "advanced_ui_analyzer"
+path = "src/bin/advanced_ui_analyzer.rs"
+
+[[bin]]
+name = "ui_fixer"
+path = "src/bin/ui_fixer.rs"
+
+[[bin]]
+name = "test_python_integration"
+path = "src/bin/test_python_integration.rs"
+
+[[bin]]
+name = "train_diffusion_model"
+path = "src/bin/train_diffusion_model.rs"
+
+[[bin]]
+name = "ai_3d_demo"
+path = "examples/ai_3d_demo.rs"
+
+[[bin]]
+name = "gesture_analyzer"
+path = "src/bin/gesture_analyzer.rs"
+
+[[bin]]
+name = "gesture_fixer"
+path = "src/bin/gesture_fixer.rs"
+
+[[bin]]
+name = "synesthetic_demo"
+path = "examples/synesthetic_demo.rs"
+
+[[bin]]
+name = "comprehensive_ai_demo"
+path = "examples/comprehensive_ai_demo.rs"

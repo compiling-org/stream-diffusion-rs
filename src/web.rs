@@ -101,6 +101,7 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/gesture/start", post(start_gesture_detection))
         .route("/api/gesture/stop", post(stop_gesture_detection))
         .route("/api/gesture/calibrate", post(calibrate_gesture))
+        .route("/api/gesture/detect", post(detect_gesture))
         .route("/api/nuwe/create-node", post(create_nuwe_node))
         .route("/api/nuwe/connect", post(connect_nuwe_nodes))
         .route("/api/nuwe/run", post(run_nuwe_pipeline))
@@ -557,6 +558,12 @@ const INDEX_HTML: &str = r#"<!DOCTYPE html>
             .fractal-controls { grid-template-columns: 1fr; }
         }
     </style>
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- Leap Motion Libraries (if available) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leapjs/0.6.4/leap.min.js"></script>
 </head>
 <body>
     <div class="status" id="status">🟢 Server Running</div>
@@ -1044,6 +1051,7 @@ quantum particles</textarea>
                             <option value="camera">Camera</option>
                             <option value="kinect">Kinect</option>
                             <option value="leap">Leap Motion</option>
+                            <option value="mediapipe">MediaPipe</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -2359,25 +2367,64 @@ quantum particles</textarea>
         let gestureStream = null;
         let gestureDetectionActive = false;
         let gestureTrainingMode = false;
+        let leapController = null;
+        let mediaPipeHands = null;
 
         async function startGestureDetection() {
             try {
+                const inputSource = document.getElementById('gesture-input').value;
                 const video = document.getElementById('gesture-camera');
                 const canvas = document.getElementById('gesture-canvas');
                 const ctx = canvas.getContext('2d');
 
-                gestureStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480, facingMode: 'user' }
-                });
-
-                video.srcObject = gestureStream;
-                video.style.display = 'block';
+                switch(inputSource) {
+                    case 'camera':
+                    case 'kinect':
+                        gestureStream = await navigator.mediaDevices.getUserMedia({
+                            video: { width: 640, height: 480, facingMode: 'user' }
+                        });
+                        video.srcObject = gestureStream;
+                        video.style.display = 'block';
+                        break;
+                    case 'leap':
+                        // Initialize Leap Motion controller
+                        if (typeof Leap !== 'undefined') {
+                            leapController = new Leap.Controller();
+                            leapController.connect();
+                            showSuccess('gesture-result', 'Leap Motion controller initialized');
+                        } else {
+                            showError('gesture-result', 'Leap Motion library not available');
+                            return;
+                        }
+                        break;
+                    case 'mediapipe':
+                        // Initialize MediaPipe Hands
+                        if (typeof mpHands !== 'undefined') {
+                            mediaPipeHands = new mpHands.Hands({
+                                locateFile: (file) => {
+                                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                                }
+                            });
+                            mediaPipeHands.setOptions({
+                                maxNumHands: 2,
+                                modelComplexity: 1,
+                                minDetectionConfidence: 0.5,
+                                minTrackingConfidence: 0.5
+                            });
+                            mediaPipeHands.onResults(onMediaPipeResults);
+                            showSuccess('gesture-result', 'MediaPipe Hands initialized');
+                        } else {
+                            showError('gesture-result', 'MediaPipe library not available');
+                            return;
+                        }
+                        break;
+                }
 
                 gestureDetectionActive = true;
                 detectGestures();
-                showSuccess('gesture-result', 'Gesture detection started');
+                showSuccess('gesture-result', `Gesture detection started with ${inputSource}`);
             } catch (error) {
-                showError('gesture-result', 'Camera access denied or not available');
+                showError('gesture-result', 'Camera access denied or not available: ' + error.message);
             }
         }
 
@@ -2385,6 +2432,16 @@ quantum particles</textarea>
             if (gestureStream) {
                 gestureStream.getTracks().forEach(track => track.stop());
                 gestureStream = null;
+            }
+
+            if (leapController) {
+                leapController.disconnect();
+                leapController = null;
+            }
+
+            if (mediaPipeHands) {
+                mediaPipeHands.close();
+                mediaPipeHands = null;
             }
 
             const video = document.getElementById('gesture-camera');
@@ -2426,22 +2483,99 @@ quantum particles</textarea>
         function detectGestures() {
             if (!gestureDetectionActive) return;
 
+            const inputSource = document.getElementById('gesture-input').value;
             const video = document.getElementById('gesture-camera');
             const canvas = document.getElementById('gesture-canvas');
             const ctx = canvas.getContext('2d');
 
-            // Draw video frame to canvas
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            // Simple gesture detection (mock implementation)
-            const gestures = ['relaxed', 'focused', 'meditation', 'stress', 'calm', 'excited', 'tired', 'confused'];
-            const randomGesture = gestures[Math.floor(Math.random() * gestures.length)];
-            const confidence = Math.floor(Math.random() * 40 + 60); // 60-100%
-            const quality = Math.floor(Math.random() * 30 + 70); // 70-100%
-
-            updateGestureDisplay(randomGesture, confidence, quality);
+            switch(inputSource) {
+                case 'camera':
+                case 'kinect':
+                    // Draw video frame to canvas
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        
+                        // Simple gesture detection (mock implementation)
+                        const gestures = ['relaxed', 'focused', 'meditation', 'stress', 'calm', 'excited', 'tired', 'confused'];
+                        const randomGesture = gestures[Math.floor(Math.random() * gestures.length)];
+                        const confidence = Math.floor(Math.random() * 40 + 60); // 60-100%
+                        const quality = Math.floor(Math.random() * 30 + 70); // 70-100%
+                        
+                        updateGestureDisplay(randomGesture, confidence, quality);
+                    }
+                    break;
+                case 'leap':
+                    // Leap Motion detection would be handled by the controller events
+                    if (leapController) {
+                        // In a real implementation, we would get frame data from the controller
+                        // For now, we'll simulate some gesture data
+                        const gestures = ['pinch', 'grab', 'point', 'fist', 'open_hand'];
+                        const randomGesture = gestures[Math.floor(Math.random() * gestures.length)];
+                        const confidence = Math.floor(Math.random() * 40 + 60); // 60-100%
+                        const quality = Math.floor(Math.random() * 30 + 70); // 70-100%
+                        
+                        updateGestureDisplay(randomGesture, confidence, quality);
+                    }
+                    break;
+                case 'mediapipe':
+                    // MediaPipe detection would process video frames
+                    if (video.readyState === video.HAVE_ENOUGH_DATA && mediaPipeHands) {
+                        mediaPipeHands.send({image: video});
+                    }
+                    break;
+            }
 
             setTimeout(detectGestures, 100); // Check every 100ms
+        }
+
+        function onMediaPipeResults(results) {
+            const canvas = document.getElementById('gesture-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Draw video frame
+            if (results.image) {
+                ctx.save();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                
+                // Draw hand landmarks
+                if (results.multiHandLandmarks) {
+                    for (const landmarks of results.multiHandLandmarks) {
+                        drawConnectors(ctx, landmarks, mpHands.HAND_CONNECTIONS,
+                                      {color: '#00FF00', lineWidth: 2});
+                        drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1});
+                    }
+                }
+                ctx.restore();
+            }
+            
+            // Detect gestures from MediaPipe results
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // Simple gesture recognition based on landmarks
+                const landmarks = results.multiHandLandmarks[0];
+                let gesture = 'unknown';
+                let confidence = 0;
+                
+                // Check for victory sign (index and middle fingers extended)
+                if (landmarks[8].y < landmarks[6].y && 
+                    landmarks[12].y < landmarks[10].y &&
+                    landmarks[16].y > landmarks[14].y &&
+                    landmarks[20].y > landmarks[18].y) {
+                    gesture = 'victory';
+                    confidence = 90;
+                }
+                // Check for thumbs up
+                else if (landmarks[4].y < landmarks[2].y && 
+                         landmarks[8].y > landmarks[6].y &&
+                         landmarks[12].y > landmarks[10].y) {
+                    gesture = 'thumbs_up';
+                    confidence = 85;
+                }
+                
+                if (gesture !== 'unknown') {
+                    updateGestureDisplay(gesture, confidence, 80);
+                }
+            }
         }
 
         function updateGestureDisplay(gesture, confidence, quality) {
@@ -2456,15 +2590,21 @@ quantum particles</textarea>
             }
 
             // Update metrics
-            document.getElementById('detected-gesture').textContent = gesture.charAt(0).toUpperCase() + gesture.slice(1);
+            document.getElementById('detected-gesture').textContent = gesture.charAt(0).toUpperCase() + gesture.slice(1).replace('_', ' ');
             document.getElementById('gesture-confidence').textContent = confidence + '%';
             document.getElementById('gesture-quality').textContent = quality + '%';
 
-            // Send gesture data to backend
+            // Send gesture data to backend with input source information
+            const inputSource = document.getElementById('gesture-input').value;
             fetch('/api/gesture/detect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ gesture, confidence, quality })
+                body: JSON.stringify({ 
+                    gesture: gesture,
+                    confidence: confidence,
+                    quality: quality,
+                    input_source: inputSource
+                })
             });
         }
 
@@ -2774,10 +2914,10 @@ async fn generate_stream_diffusion(
     let prompt = request.get("prompt").and_then(|v| v.as_str()).unwrap_or("abstract art");
 
     // Create a simple stream diffusion processor
-    let mut processor = crate::stream_diffusion::StreamDiffusionProcessor::new();
-    let _ = processor.load_model("default").await;
+    let mut processor = crate::diffusion::DiffusionModel::new();
+    // Note: In a real implementation, you would load a model here
 
-    match processor.generate_image(prompt).await {
+    match processor.generate_image(prompt, "default") {
         Ok(image_data) => {
             let response = GenerationResponse {
                 image_data,
@@ -2926,6 +3066,36 @@ async fn calibrate_gesture() -> Json<ApiResponse<String>> {
     Json(ApiResponse {
         success: true,
         data: Some("Gesture calibration completed".to_string()),
+        error: None,
+    })
+}
+
+/// Detect gesture from input data
+async fn detect_gesture(
+    axum::extract::State(_state): axum::extract::State<AppState>,
+    axum::extract::Json(request): axum::extract::Json<serde_json::Value>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    // Extract gesture input source
+    let input_source = request.get("input_source").and_then(|v| v.as_str()).unwrap_or("camera");
+    let gesture_type = request.get("gesture").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let confidence = request.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let quality = request.get("quality").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    
+    // In a real implementation, this would process the gesture data using the gesture module
+    // For now, we'll return a mock response with enhanced information
+    let response = serde_json::json!({
+        "detected_gesture": gesture_type,
+        "input_source": input_source,
+        "confidence": confidence,
+        "quality": quality,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "supported_sources": ["camera", "kinect", "leap_motion", "mediapipe"],
+        "message": format!("Gesture '{}' detected from {} input source", gesture_type, input_source)
+    });
+    
+    Json(ApiResponse {
+        success: true,
+        data: Some(response),
         error: None,
     })
 }

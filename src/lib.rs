@@ -1,61 +1,56 @@
-//! # Stream Diffusion RS
+//! Stream Diffusion RS - A comprehensive toolkit for diffusion models, EEG analysis, and real-time neurofeedback systems.
 //!
-//! High-performance multimodal AI and ML research framework in Rust with
-//! integrated NUWE-inspired features for standalone audiovisual processing.
-//!
-//! ## Features
-//!
-//! ### 🌈 **Multimodal AI Core**
-//! - **Cross-Modal Fusion**: Text, image, audio, and biometric data integration
-//! - **Multisensorial Processing**: EEG, tactile, thermal, physiological signal analysis
-//! - **Real-time Streaming**: Sub-10ms latency across multiple sensory dimensions
-//! - **Neuro-Emotive Intelligence**: Brain-computer interfaces with emotional context
-//!
-//! ### 🤖 **Diffusion Models**
-//! - **UNet Architecture**: Complete implementation with attention blocks, resnet blocks, and time embeddings
-//! - **DDIM Scheduler**: Advanced denoising diffusion implicit models for fast inference
-//! - **Text-to-Image**: CLIP text encoding integration
-//! - **Streaming Support**: Real-time image generation with progress callbacks
-//! - **Multimodal Generation**: EEG-to-visual, audio-to-image cross-modal synthesis
-//!
-//! ### 🧠 **EEG & Neuroscience**
-//! - **Signal Processing**: Filtering, frequency analysis, artifact removal
-//! - **Brain Wave Analysis**: Alpha, Beta, Theta, Delta, Gamma band extraction
-//! - **Real-time Processing**: Circular buffers for streaming EEG data
-//! - **Neurofeedback**: Real-time brain state monitoring and feedback
-//! - **Multisensorial Fusion**: EEG + biometric + environmental data integration
-//! - **Cross-Modal Translation**: Brain waves to visual/audio/artistic expressions
-//!
-//! ### 🎛️ **Basic NUWE Features**
-//! - **Simple Node Pipelines**: Lightweight node-based processing for standalone use
-//! - **EEG-to-Visual Conversion**: Basic brain wave to image synthesis
-//! - **Real-time Neurofeedback**: Streaming EEG analysis with visual feedback
-//! - **Creative Art Generation**: EEG-influenced diffusion model outputs
-//! - **Audiovisual Synchronization**: Coordinated audio-visual output generation
+//! This library provides a complete framework for:
+//! - Diffusion model implementation with UNet architecture
+//! - EEG signal processing and analysis
+//! - Real-time streaming capabilities
+//! - ONNX model integration
+//! - Web-based interface for experimentation
+//! - UI analysis and automated fixing tools
 
+// Core modules
 pub mod diffusion;
-pub mod onnx;
-pub mod ml;
 pub mod eeg;
-pub mod fractal_shaders;
 pub mod visualization;
 pub mod training;
+pub mod ml;
+pub mod onnx;
 pub mod web;
-pub mod nuwe_integration;
-pub mod node_graph;
-pub mod basic_nuwe_features;
-pub mod stream_diffusion;
+pub mod python;
 pub mod real_time_streaming;
+pub mod fractal_shaders;
+pub mod gesture;
+pub mod synesthesia;
+pub mod ai_3d_models;
 pub mod bevy_integration;
+#[cfg(feature = "burn-ml")]
+pub mod burn;
+#[cfg(feature = "tch-ml")]
+pub mod tch_impl;
+pub mod shader_animations;
+pub mod audio_synthesis;
 
-// Re-export main types
-pub use diffusion::*;
-pub use onnx::*;
-pub use ml::*;
-pub use eeg::*;
-pub use fractal_shaders::*;
-pub use visualization::*;
-pub use training::*;
-pub use nuwe_integration::*;
-pub use basic_nuwe_features::*;
-pub use stream_diffusion::*;
+// UI analysis and fixing tools
+pub mod ui_analyzer;
+pub mod advanced_ui_analyzer;
+pub mod ui_fixer;
+
+// Re-exports for easier access
+pub use diffusion::DiffusionModel;
+pub use eeg::{EEGProcessor, EEGData};
+pub use visualization::Plotter;
+pub use training::{TrainingConfig, ModelTrainer};
+pub use ml::{DataLoader, DataPreprocessor};
+pub use onnx::{OnnxModel, OnnxConverter, OnnxBridge};
+pub use python::{PythonEnvironment, PythonModel};
+pub use real_time_streaming::RealTimeStreamingFramework;
+pub use fractal_shaders::FractalShaderRenderer;
+// pub use gesture::GestureSystem; // Commented out as GestureSystem doesn't exist
+pub use synesthesia::SynestheticFramework;
+pub use ai_3d_models::AI3DModelManager;
+// #[cfg(feature = "burn-ml")]
+// pub use burn::BurnModelManager;
+#[cfg(feature = "tch-ml")]
+pub use tch_impl::TchModelManager;
+pub use shader_animations::ShaderAnimationEngine;
+pub use audio_synthesis::Synthesizer;
