@@ -190,6 +190,77 @@ This document provides a comprehensive overview of the current state of the Stre
 - **Output**: Model outputs → WebSocket → Frontend visualization
 - **Real-time**: Continuous data streaming with sub-100ms latency
 
+### Frontend-Backend Integration Architecture
+
+```mermaid
+graph TD
+    A[Frontend UI] --> B[HTTP API Layer]
+    A --> C[WebSocket Layer]
+    B --> D[Rust Backend]
+    C --> D
+    D --> E[Diffusion Engine]
+    D --> F[EEG Processor]
+    D --> G[ONNX Runtime]
+    D --> H[Training Framework]
+    E --> I[Model Inference]
+    F --> J[Signal Analysis]
+    G --> K[Hardware Acceleration]
+    H --> L[Model Training]
+    
+    I --> M[Results]
+    J --> M
+    K --> M
+    L --> M
+    
+    M --> N[WebSocket Streaming]
+    M --> O[HTTP Responses]
+    
+    N --> A
+    O --> A
+    
+    style A fill:#4CAF50,stroke:#388E3C
+    style B fill:#2196F3,stroke:#0D47A1
+    style C fill:#FF9800,stroke:#E65100
+    style D fill:#9C27B0,stroke:#4A148C
+    style E fill:#FF5722,stroke:#BF360C
+    style F fill:#009688,stroke:#004D40
+    style G fill:#795548,stroke:#3E2723
+    style H fill:#607D8B,stroke:#263238
+    style M fill:#E91E63,stroke:#880E4F
+```
+
+### Real-time Data Flow Between Frontend and Backend
+
+```mermaid
+sequenceDiagram
+    participant UI as Frontend UI
+    participant HTTP as HTTP API
+    participant WS as WebSocket
+    participant Backend as Rust Backend
+    participant Modules as Backend Modules
+    
+    UI->>HTTP: POST /api/generate
+    HTTP->>Backend: Process Request
+    Backend->>Modules: Execute Diffusion
+    Modules->>Backend: Return Results
+    Backend->>HTTP: Send Response
+    HTTP->>UI: Display Image
+    
+    UI->>WS: WebSocket Connection
+    WS->>Backend: Register Client
+    Backend->>Modules: Start Streaming
+    Modules->>Backend: Stream Data
+    Backend->>WS: Broadcast Updates
+    WS->>UI: Real-time Updates
+    
+    UI->>HTTP: GET /api/eeg/data
+    HTTP->>Backend: Fetch EEG Data
+    Backend->>Modules: Process EEG
+    Modules->>Backend: Return Analysis
+    Backend->>HTTP: Send EEG Data
+    HTTP->>UI: Update Visualizations
+```
+
 ## Testing and Quality Assurance
 
 ### Automated Testing
@@ -215,6 +286,52 @@ This document provides a comprehensive overview of the current state of the Stre
 - **Logging**: Comprehensive event tracking
 - **Security**: HTTPS support, input validation
 - **Monitoring**: Performance and health metrics
+
+### Frontend Component Hierarchy
+
+```mermaid
+graph TD
+    A[Main Application] --> B[Dashboard]
+    A --> C[Diffusion Interface]
+    A --> D[EEG Analysis]
+    A --> E[Fusion Interface]
+    A --> F[Training Interface]
+    A --> G[Model Management]
+    
+    B --> B1[Status Panel]
+    B --> B2[Quick Actions]
+    B --> B3[Feature Grid]
+    
+    C --> C1[Image Canvas]
+    C --> C2[Parameter Controls]
+    C --> C3[Model Selector]
+    C --> C4[Progress Display]
+    
+    D --> D1[Waveform Display]
+    D --> D2[Frequency Analysis]
+    D --> D3[Topography View]
+    D --> D4[Quality Metrics]
+    
+    E --> E1[Multi-canvas Display]
+    E --> E2[Fusion Controls]
+    E --> E3[Correlation Map]
+    
+    F --> F1[Training Config]
+    F --> F2[Progress Charts]
+    F --> F3[Parameter Sliders]
+    
+    G --> G1[Model List]
+    G --> G2[Upload Interface]
+    G --> G3[Performance Metrics]
+    
+    style A fill:#2196F3,stroke:#0D47A1
+    style B fill:#4CAF50,stroke:#388E3C
+    style C fill:#FF9800,stroke:#E65100
+    style D fill:#9C27B0,stroke:#4A148C
+    style E fill:#009688,stroke:#004D40
+    style F fill:#FF5722,stroke:#BF360C
+    style G fill:#795548,stroke:#3E2723
+```
 
 ## Future Development Roadmap
 
